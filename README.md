@@ -4,7 +4,7 @@ Projeto final do **Space Tech Bootcamp 2026 — Future Tech Leaders Brasil**.
 
 Este repositório estima e mapeia a **área queimada mensal e acumulada** no Parque Nacional da Chapada das Mesas (PNCM), no sul do Maranhão, entre junho e outubro de 2024. A análise usa **séries temporais de índices espectrais do Sentinel-2** (NBR e dNBR) no Google Earth Engine e **valida o resultado com o MapBiomas Fogo**.
 
-> **Status (05/11/2026):** análise concluída. Resultados finais com validação abaixo.
+> **Status (08/11/2026):** análise concluída, incluindo um teste com Random Forest. Resultados finais com validação abaixo.
 
 ---
 
@@ -69,6 +69,32 @@ O **dNBR mensal máximo** concordou mais com o MapBiomas em quase todos os limia
 
 A tabela também mostra que **a área estimada é muito sensível ao limiar**: entre 0,10 e 0,30, ela varia de 37.604 para 2.668 ha. O limiar de 0,20 foi definido **antes** da comparação com o MapBiomas, com base no histograma do dNBR. O MapBiomas foi usado para escolher **entre os dois métodos**, não para ajustar o limiar.
 
+## Teste com aprendizado de máquina: Random Forest
+
+Também foi testado um classificador **Random Forest** (100 árvores, `ee.Classifier.smileRandomForest`), treinado com os pixels das 38 amostras visuais (70 % treino, 30 % teste) e validado contra o MapBiomas da mesma forma que os métodos de limiar.
+
+| Método | Área (ha) | Omissão | Comissão | Dice | Acurácia no teste interno |
+|---|---|---|---|---|---|
+| Limiar: dNBR acumulado (0,20) | 24.444 | 38 % | 72 % | 0,38 | — |
+| **Limiar: dNBR mensal máximo (0,20)** | **12.065** | 49 % | 54 % | **0,48** | — |
+| Random Forest, 13 variáveis (NBR mensal + quedas de NBR) | 2.018 | 89 % | 39 % | 0,19 | 100 % |
+| Random Forest, 7 variáveis (só quedas de NBR) | 1.332 | 91 % | 29 % | 0,15 | 100 % |
+| *MapBiomas Fogo (jun–out)* | *10.986* | — | — | — | — |
+
+**O que os dois testes mostram:**
+1. **A acurácia de 100 % no teste interno foi enganosa.** Os pixels de teste vinham dos mesmos polígonos do treino, e as amostras continham apenas casos extremos. A validação externa, com o MapBiomas, revelou que o modelo perdeu cerca de 90 % da área queimada.
+2. **No primeiro teste, o modelo aprendeu o "lugar", e não o fogo.** A variável mais importante foi o **NBR de maio**, anterior às queimadas. As amostras de queimado estavam concentradas em poucas áreas do parque, e o modelo aprendeu a vegetação dessas áreas (viés amostral espacial).
+
+   ![Importância das variáveis, 1º teste](rf_importancia_variaveis.png)
+
+3. **No segundo teste, só com as quedas de NBR, as variáveis passaram a fazer sentido físico**: dNBR mensal máximo, dNBR acumulado e a queda de setembro, o mês do grande incêndio. Mas o resultado continuou muito conservador. Como as amostras de queimado tinham apenas o miolo das cicatrizes (dNBR > 0,67), o modelo aprendeu que "queimado" é só a queda muito forte.
+
+   ![Importância das variáveis, 2º teste](rf_importancia_variaveis_mudanca.png)
+
+![Comparação dos três métodos](comparacao_tres_metodos_rf_mudanca.png)
+
+**Conclusão:** um classificador supervisionado só é tão bom quanto as suas amostras. Para superar o limiar, o Random Forest precisaria de amostras **representativas**: espalhadas por todo o parque e incluindo casos intermediários (bordas de cicatrizes, queimadas de baixa intensidade e áreas apenas ressecadas). Por isso, o resultado principal do projeto é o **limiar sobre o dNBR mensal máximo**.
+
 ## Etapas do trabalho
 
 ### 1. Área de estudo e qualidade dos dados (notebook 01)
@@ -123,7 +149,7 @@ O projeto estima a **extensão** da área queimada, e não a severidade da queim
 ## Trabalhos futuros
 
 - Composição mensal pelo **NBR mínimo** (como no MapBiomas Fogo), para corrigir a divisão de queimadas entre meses.
-- Classificação com **Random Forest** treinada nas amostras visuais, incluindo casos difíceis (bordas de cicatrizes e áreas apenas ressecadas).
+- Novo treino do **Random Forest** com amostras representativas: espalhadas por todo o parque, incluindo casos difíceis (bordas de cicatrizes, queimadas fracas e áreas apenas ressecadas), e com teste em polígonos separados dos de treino.
 - Repetir a análise para **outros anos** e para outras unidades de conservação do Cerrado maranhense.
 
 ## Arquivos
@@ -133,6 +159,8 @@ O projeto estima a **extensão** da área queimada, e não a severidade da queim
 | `01_area_composicoes_dnbr_teste.ipynb` | Área de estudo, composições mensais, NBR e teste de dNBR |
 | `02_limiar_e_classificacao.ipynb` | Amostras visuais, escolha do limiar e primeira classificação mensal |
 | `03_area_queimada_validacao_mapbiomas.ipynb` | Classificação final, série mensal, polígonos e validação com o MapBiomas |
+| `04_random_forest.ipynb` | Teste com Random Forest e comparação dos três métodos com o MapBiomas |
+| `comparacao_tres_metodos_rf_mudanca.csv`, `rf_importancia_variaveis*.csv` | Resultados do Random Forest |
 | `poligonos_area_queimada_PNCM_2024_mensal.*` | Polígonos de área queimada (Shapefile: .shp, .shx, .dbf, .prj, .cpg) |
 | `amostras_queimado.geojson`, `amostras_nao_queimado.geojson` | Polígonos de referência desenhados |
 | `resumo_resultados.csv` | Resumo: áreas, omissão, comissão e Dice |
@@ -144,7 +172,7 @@ O projeto estima a **extensão** da área queimada, e não a severidade da queim
 ## Como reproduzir
 
 1. Tenha uma conta Google com acesso ao Earth Engine e um projeto do Google Cloud registrado para uso não comercial.
-2. Abra os notebooks no [Google Colab](https://colab.research.google.com/), na ordem 01 → 02 → 03.
+2. Abra os notebooks no [Google Colab](https://colab.research.google.com/), na ordem 01 → 02 → 03 → 04.
 3. Na célula de configuração, confira se `PROJETO` tem o ID do seu projeto do Google Cloud.
 4. Execute as células em ordem, de cima para baixo. O notebook 02 pede que você desenhe as amostras no mapa; o 03 lê essas amostras do Google Drive.
 
