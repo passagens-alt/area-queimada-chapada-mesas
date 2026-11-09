@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Área queimada — PN Chapada das Mesas, 2024</title>
+<meta name="description" content="Mapeamento mensal da área queimada no Parque Nacional da Chapada das Mesas (MA) em 2024 com Sentinel-2, NBR/dNBR e Google Earth Engine, validado com o MapBiomas Fogo.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fbfaf7;
+    --paper: #ffffff;
+    --ink: #1f2328;
+    --muted: #5b6168;
+    --line: #e4e1da;
+    --accent: #b8321f;
+    --accent-soft: #f6e3de;
+    --blue: #2b6cb0;
+    --jun: #fde725; --jul: #5ec962; --ago: #21918c; --set: #3b528b; --out: #440154;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.65 "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  a { color: var(--blue); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+  header.hero { padding: 48px 0 28px; border-bottom: 1px solid var(--line); background: var(--paper); }
+  .kicker { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  h1 { font-family: "Source Serif 4", Georgia, serif; font-weight: 600; font-size: clamp(28px, 4.5vw, 42px); line-height: 1.15; margin: 10px 0 14px; }
+  .lede { font-size: 18px; color: var(--muted); max-width: 760px; margin: 0; }
+  .byline { margin-top: 18px; font-size: 14px; color: var(--muted); }
+  .byline a { white-space: nowrap; }
+  nav.toc { position: sticky; top: 0; z-index: 1000; background: rgba(251,250,247,.94); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+  nav.toc .wrap { display: flex; gap: 18px; overflow-x: auto; padding-top: 10px; padding-bottom: 10px; font-size: 14px; }
+  nav.toc a { color: var(--muted); text-decoration: none; white-space: nowrap; }
+  nav.toc a:hover { color: var(--ink); }
+  section { padding: 40px 0 8px; }
+  h2 { font-family: "Source Serif 4", Georgia, serif; font-weight: 600; font-size: 28px; margin: 0 0 14px; }
+  h3 { font-size: 17px; margin: 26px 0 8px; }
+  p { margin: 0 0 14px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 26px 0 0; }
+  .stat { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .stat .v { font-family: "Source Serif 4", Georgia, serif; font-size: 28px; font-weight: 600; line-height: 1.1; }
+  .stat .l { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .stat.hl { border-color: var(--accent); background: var(--accent-soft); }
+  #map-card { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  #map { height: 560px; width: 100%; background: #dfe6e9; }
+  .map-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 14px; border-top: 1px solid var(--line); font-size: 14px; }
+  .map-bar .title { font-weight: 600; margin-right: 4px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; user-select: none; background: #fff; }
+  .chip input { margin: 0; accent-color: var(--ink); }
+  .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0,0,0,.25); }
+  .chip small { color: var(--muted); }
+  .map-note { font-size: 13px; color: var(--muted); padding: 0 14px 12px; }
+  #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--muted); pointer-events: none; z-index: 500; }
+  figure { margin: 18px 0 22px; }
+  figure img { width: 100%; height: auto; display: block; background: #fff; border: 1px solid var(--line); border-radius: 8px; }
+  figcaption { font-size: 13.5px; color: var(--muted); margin-top: 8px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .grid3 figure { margin: 0; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 10px 0 20px; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th { background: #f3f1ec; font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  tr.best td { background: #eef4fb; font-weight: 600; }
+  .tablewrap { overflow-x: auto; }
+  .callout { border-left: 3px solid var(--accent); background: var(--paper); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0 20px; }
+  ol.steps { padding-left: 20px; }
+  ol.steps li { margin-bottom: 6px; }
+  code { font: 13.5px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #f1efea; padding: 1px 5px; border-radius: 4px; }
+  .refs li { margin-bottom: 8px; font-size: 14.5px; }
+  footer { margin-top: 40px; padding: 26px 0 40px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+  .leaflet-popup-content { font: 14px/1.5 "Inter", sans-serif; }
+  .legend { background: rgba(255,255,255,.92); padding: 8px 10px; border-radius: 6px; font-size: 12.5px; line-height: 1.6; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+  .legend .sw { width: 12px; height: 12px; vertical-align: -2px; margin-right: 6px; }
+  @media (max-width: 720px) {
+    #map { height: 440px; }
+    .two, .grid3 { grid-template-columns: 1fr; }
+    header.hero { padding-top: 32px; }
+    .legend { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">Space Tech Bootcamp 2026 · Future Tech Leaders Brasil · Projeto final</div>
+    <h1>Área queimada no Parque Nacional da Chapada das Mesas (MA) na estação seca de 2024</h1>
+    <p class="lede">Mapeamento mensal das cicatrizes de fogo com imagens Sentinel-2, índices NBR/dNBR e Google Earth Engine, validado com o MapBiomas Fogo.</p>
+    <div class="byline">
+      Fernanda Carine Soares Mendes · mestranda em Engenharia Aeroespacial (UEMA) ·
+      <a href="https://github.com/passagens-alt/area-queimada-chapada-mesas">código e dados no GitHub</a>
+    </div>
+    <div class="stats">
+      <div class="stat hl"><div class="v">12.202 ha</div><div class="l">área queimada, jun–out/2024</div></div>
+      <div class="stat"><div class="v">7,6 %</div><div class="l">do parque (160.638 ha)</div></div>
+      <div class="stat"><div class="v">10.986 ha</div><div class="l">MapBiomas Fogo, mesmo período</div></div>
+      <div class="stat"><div class="v">0,48</div><div class="l">F1 / Dice de concordância espacial com o MapBiomas</div></div>
+      <div class="stat"><div class="v">4.290</div><div class="l">polígonos de área queimada</div></div>
+    </div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Seções">
+  <div class="wrap">
+    <a href="#mapa">Mapa</a>
+    <a href="#contexto">Contexto e ODS</a>
+    <a href="#dados">Dados</a>
+    <a href="#metodo">Método</a>
+    <a href="#resultados">Resultados</a>
+    <a href="#validacao">Validação</a>
+    <a href="#metodos">Comparação de métodos</a>
+    <a href="#rf">Random Forest</a>
+    <a href="#limites">Limitações</a>
+    <a href="#referencias">Referências</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <section id="mapa">
+    <h2>Mapa interativo</h2>
+    <p>Cada polígono é uma área classificada como queimada, colorida pelo <strong>mês da queima</strong>. Clique num polígono para ver a área e o mês. Use os botões abaixo do mapa para mostrar ou esconder cada mês.</p>
+    <div id="map-card">
+      <div style="position:relative">
+        <div id="map" role="region" aria-label="Mapa das áreas queimadas"></div>
+        <div id="loading">Carregando polígonos…</div>
+      </div>
+      <div class="map-bar" id="filters">
+        <span class="title">Mês da queima:</span>
+      </div>
+      <div class="map-note">Fundo: imagens de satélite Esri World Imagery. Polígonos: este estudo (Sentinel-2, 20 m, dNBR mensal máximo &gt; 0,20).</div>
+    </div>
+  </section>
+
+  <section id="contexto">
+    <h2>Contexto e relevância</h2>
+    <p>O fogo é recorrente no Cerrado do sul do Maranhão. Em setembro de 2024, um grande incêndio atingiu o Parque Nacional da Chapada das Mesas, unidade de conservação de cerca de 160 mil hectares. O monitoramento mais divulgado usa <strong>focos de calor</strong>, que mostram onde houve fogo ativo, mas não quanto de área foi queimada nem como essa área se acumula ao longo da estação seca.</p>
+    <p><strong>Pergunta científica:</strong> qual foi a extensão da área queimada no parque durante a estação seca de 2024 e como ela evoluiu mês a mês?</p>
+    <p><strong>Objetivo:</strong> estimar e mapear a área queimada mensal e acumulada entre junho e outubro de 2024, a partir de séries temporais de índices espectrais do Sentinel-2, e avaliar o resultado contra uma referência independente.</p>
+    <div class="callout">
+      <strong>ODS 15 — Vida Terrestre</strong> (relação principal): informação para a conservação de um ecossistema protegido do Cerrado e para o acompanhamento da sua degradação pelo fogo.<br>
+      <strong>ODS 13 — Ação contra a Mudança Global do Clima</strong> (relação secundária): o monitoramento da área queimada apoia a resposta a estações secas severas. O projeto não mede emissões.
+    </div>
+    <p><strong>Contribuição prática:</strong> a série mensal mostra em que meses e setores o parque é mais afetado, o que pode subsidiar a gestão da unidade (ICMBio) e as brigadas no planejamento de prevenção e combate. O fluxo é aberto, usa apenas dados gratuitos e pode ser repetido em outros anos e unidades de conservação.</p>
+  </section>
+
+  <section id="dados">
+    <h2>Dados</h2>
+    <div class="tablewrap">
+    <table>
+      <tr><th>Dado</th><th>Fonte</th><th>Uso</th></tr>
+      <tr><td>Sentinel-2 MSI L2A (reflectância de superfície)</td><td>Copernicus/ESA, via Google Earth Engine</td><td>Composições mensais, NBR, dNBR</td></tr>
+      <tr><td>Cloud Score+</td><td>Google, via Google Earth Engine</td><td>Máscara de nuvens e sombras</td></tr>
+      <tr><td>Limite do parque</td><td>WDPA (World Database on Protected Areas)</td><td>Recorte da área de estudo</td></tr>
+      <tr><td>MapBiomas Fogo, Coleção 5</td><td>MapBiomas</td><td>Validação (referência independente)</td></tr>
+    </table>
+    </div>
+    <p>Todos os dados de entrada são <strong>públicos e gratuitos</strong>. Foram usadas 222 cenas Sentinel-2 entre maio e outubro de 2024. Após a máscara de nuvens, 99,6 % do parque tem dado válido em todos os meses. Os <strong>polígonos de área queimada</strong> produzidos por este estudo estão publicados no repositório (Shapefile e GeoJSON).</p>
+  </section>
+
+  <section id="metodo">
+    <h2>Método</h2>
+    <ol class="steps">
+      <li><strong>Composições mensais</strong> (maio a outubro de 2024): pixels com nota de céu limpo ≥ 0,60 e mediana do mês. Maio é a referência pré-fogo.</li>
+      <li><strong>Índices:</strong> <code>NBR = (B8A − B12) / (B8A + B12)</code>, em que B8A é o infravermelho próximo (865 nm) e B12 o infravermelho de ondas curtas (2190 nm), ambos com 20 m. A queda de NBR de cada mês é <code>dNBR(mês) = NBR(mês anterior) − NBR(mês)</code>.</li>
+      <li><strong>Classificação:</strong> pixel queimado se o <strong>dNBR mensal máximo</strong> (a maior queda entre dois meses seguidos) for maior que <strong>0,20</strong>.</li>
+      <li><strong>Conectividade:</strong> manchas com menos de 3 pixels conectados (&lt; 0,12 ha) são removidas como ruído.</li>
+      <li><strong>Mês da queima:</strong> o mês com a maior queda de NBR. Cada pixel é contado uma única vez.</li>
+      <li><strong>Vetorização</strong> em polígonos e <strong>validação</strong> pixel a pixel contra o MapBiomas Fogo (jun–out/2024).</li>
+    </ol>
+    <div class="grid3">
+      <figure><img src="falsa_cor_mes05.png" alt="Composição falsa-cor de maio de 2024" loading="lazy"><figcaption>Falsa-cor (B12-B8A-B4), maio</figcaption></figure>
+      <figure><img src="falsa_cor_mes09.png" alt="Composição falsa-cor de setembro de 2024" loading="lazy"><figcaption>Falsa-cor, setembro</figcaption></figure>
+      <figure><img src="dnbr_mes05_mes09.png" alt="dNBR entre maio e setembro" loading="lazy"><figcaption>dNBR maio → setembro (vermelho = queda forte)</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="resultados">
+    <h2>Resultados: a série mensal</h2>
+    <div class="tablewrap">
+    <table>
+      <tr><th>Mês (2024)</th><th>jun</th><th>jul</th><th>ago</th><th>set</th><th>out</th><th>Total</th></tr>
+      <tr><td>Este estudo (ha)</td><td>6.612</td><td>1.637</td><td>293</td><td>2.152</td><td>1.508</td><td><strong>12.202</strong></td></tr>
+      <tr><td>MapBiomas Fogo (ha)</td><td>2.102</td><td>2.170</td><td>807</td><td>5.012</td><td>896</td><td><strong>10.986</strong></td></tr>
+    </table>
+    </div>
+    <figure><img src="serie_mensal_nosso_vs_mapbiomas.png" alt="Gráfico de barras da área queimada por mês, este estudo e MapBiomas" loading="lazy"><figcaption>Área queimada por mês: este estudo (vermelho) e MapBiomas Fogo (azul).</figcaption></figure>
+    <p>A área total ficou a cerca de 11 % da área do MapBiomas, mas em parte porque <strong>dois erros sistemáticos se compensam</strong>:</p>
+    <ul>
+      <li><strong>Junho superestimado:</strong> de maio para junho começa a secagem da vegetação do Cerrado, que reduz o NBR mesmo sem fogo.</li>
+      <li><strong>Setembro subestimado:</strong> a composição pela mediana divide entre dois meses uma queimada que ocorre perto da virada do mês, e em cada um a queda fica abaixo do limiar. O grande incêndio de 2024 começou no fim de agosto.</li>
+    </ul>
+  </section>
+
+  <section id="validacao">
+    <h2>Validação com o MapBiomas Fogo</h2>
+    <div class="two">
+      <figure><img src="mapa_concordancia_mapbiomas_mensal.png" alt="Mapa de concordância com o MapBiomas" loading="lazy"><figcaption>Vermelho: os dois mapas indicam queimada. Laranja: só este estudo (comissão). Azul: só o MapBiomas (omissão).</figcaption></figure>
+      <div>
+        <div class="tablewrap">
+        <table>
+          <tr><th>Métrica (grade de 30 m)</th><th>Valor</th></tr>
+          <tr><td>Precisão (1 − comissão)</td><td>46 %</td></tr>
+          <tr><td>Recall (1 − omissão)</td><td>51 %</td></tr>
+          <tr><td>F1-score (= coeficiente de Dice)</td><td><strong>0,48</strong></td></tr>
+        </table>
+        </div>
+        <p>Os <strong>grandes incêndios são detectados pelos dois produtos</strong>: noroeste, leste e fragmento sul do parque. Em volta de várias cicatrizes aparece azul: este estudo marca o miolo das cicatrizes, e o MapBiomas as delimita de forma mais larga.</p>
+        <p>O MapBiomas também é um mapa produzido por modelo (Landsat, 30 m), e não "verdade de campo". Por isso os números indicam <strong>concordância com uma referência independente</strong>, e não acurácia absoluta.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="metodos">
+    <h2>Comparação de métodos e sensibilidade ao limiar</h2>
+    <p>Dois índices foram testados com o mesmo limiar e a mesma validação: o <strong>dNBR acumulado</strong> (maio − outubro) e o <strong>dNBR mensal máximo</strong>. O mensal concordou mais com o MapBiomas em quase todos os limiares, porque detecta a queimada antes da rebrota e sofre menos com a secagem sazonal.</p>
+    <div class="tablewrap">
+    <table>
+      <tr><th>Limiar</th><th>F1: dNBR acumulado</th><th>F1: dNBR mensal máximo</th><th>Área, mensal (ha)</th></tr>
+      <tr><td>0,10</td><td>0,25</td><td>0,39</td><td>37.604</td></tr>
+      <tr><td>0,15</td><td>0,31</td><td>0,47</td><td>21.764</td></tr>
+      <tr class="best"><td>0,20</td><td>0,38</td><td>0,48</td><td>12.065</td></tr>
+      <tr><td>0,25</td><td>0,42</td><td>0,39</td><td>6.015</td></tr>
+      <tr><td>0,30</td><td>0,40</td><td>0,25</td><td>2.668</td></tr>
+    </table>
+    </div>
+    <figure><img src="sensibilidade_e_comparacao_metodos.png" alt="Gráficos de área estimada e concordância em função do limiar" loading="lazy"><figcaption>A área estimada é muito sensível ao limiar: entre 0,10 e 0,30 ela cai de 37.604 para 2.668 ha. O limiar de 0,20 foi fixado antes da comparação com o MapBiomas.</figcaption></figure>
+  </section>
+
+  <section id="rf">
+    <h2>Teste com aprendizado de máquina: Random Forest</h2>
+    <p>Um <strong>Random Forest</strong> (100 árvores) foi treinado com pixels das 38 amostras desenhadas por interpretação visual (70 % treino, 30 % teste). No teste interno, ele acertou <strong>100 %</strong>. Na validação externa com o MapBiomas, porém, <strong>perdeu cerca de 90 % da área queimada</strong>.</p>
+    <div class="tablewrap">
+    <table>
+      <tr><th>Método</th><th>Área (ha)</th><th>Precisão</th><th>Recall</th><th>F1</th></tr>
+      <tr><td>Limiar, dNBR acumulado</td><td>24.444</td><td>28 %</td><td>62 %</td><td>0,38</td></tr>
+      <tr class="best"><td>Limiar, dNBR mensal máximo</td><td>12.065</td><td>46 %</td><td>51 %</td><td>0,48</td></tr>
+      <tr><td>Random Forest, 13 variáveis</td><td>2.018</td><td>61 %</td><td>11 %</td><td>0,19</td></tr>
+      <tr><td>Random Forest, 7 variáveis de mudança</td><td>1.332</td><td>71 %</td><td>9 %</td><td>0,15</td></tr>
+    </table>
+    </div>
+    <div class="two">
+      <figure><img src="rf_importancia_variaveis.png" alt="Importância das variáveis do Random Forest, primeiro teste" loading="lazy"><figcaption>1º teste: a variável mais importante foi o NBR de maio, <em>antes</em> das queimadas. O modelo aprendeu a vegetação de onde estavam as amostras (viés amostral espacial).</figcaption></figure>
+      <figure><img src="comparacao_tres_metodos_rf_mudanca.png" alt="Comparação da área e da concordância dos três métodos" loading="lazy"><figcaption>Área estimada e concordância (F1) dos três métodos.</figcaption></figure>
+    </div>
+    <div class="callout"><strong>Lição:</strong> um classificador supervisionado só é tão bom quanto as suas amostras. Elas cobriam apenas casos extremos (o miolo das cicatrizes e áreas sem nenhuma mudança), e o modelo aprendeu que "queimado" é só a queda muito forte. A acurácia interna de 100 % foi enganosa; a validação externa revelou o problema.</div>
+  </section>
+
+  <section id="limites">
+    <h2>Limitações e próximos passos</h2>
+    <ul>
+      <li>Estudo de uma unidade de conservação em um ano; validação contra um produto de referência, e não contra dados de campo.</li>
+      <li>Comissão em junho, causada pela secagem da vegetação, e divisão de queimadas entre meses pela composição mediana.</li>
+      <li>Resultado sensível ao limiar; o projeto mede a extensão da área queimada, não a severidade nem as causas do fogo.</li>
+      <li>Áreas que queimam cedo e rebrotam antes da imagem seguinte podem não ser detectadas.</li>
+      <li><strong>Próximos passos:</strong> agregação temporal de 45 ou 90 dias para captar as áreas que rebrotam; composição mensal pelo NBR mínimo; novo Random Forest com amostras representativas, espalhadas pelo parque e incluindo casos intermediários; repetir a análise para outros anos e unidades de conservação.</li>
+    </ul>
+  </section>
+
+  <section id="referencias">
+    <h2>Referências</h2>
+    <ul class="refs">
+      <li>ALENCAR, A. A. C. et al. Long-term Landsat-based monthly burned area dataset for the Brazilian biomes using deep learning. <em>Remote Sensing</em>, v. 14, n. 11, 2510, 2022. <a href="https://doi.org/10.3390/rs14112510">doi:10.3390/rs14112510</a></li>
+      <li>KEY, C. H.; BENSON, N. C. Landscape Assessment (LA). In: LUTES, D. C. et al. <em>FIREMON: Fire Effects Monitoring and Inventory System</em>. USDA Forest Service, RMRS-GTR-164-CD, 2006.</li>
+      <li>MAPBIOMAS. <em>MapBiomas Fogo — Coleção 5</em>. <a href="https://brasil.mapbiomas.org/mapbiomas-fogo/">brasil.mapbiomas.org/mapbiomas-fogo</a></li>
+      <li>SILVA, F. S.; PESTANA, A. L. M.; MARTINS, L. S. Sensoriamento remoto para detecção de queimadas no Cerrado maranhense: uma aplicação no Parque Estadual do Mirador. <em>Revista Geográfica Acadêmica</em>, v. 13, n. 2, p. 90–105, 2019.</li>
+      <li>SILVA JUNIOR, C. H. L. et al. Dinâmica das queimadas no Cerrado do estado do Maranhão, Nordeste do Brasil. <em>Revista do Departamento de Geografia</em>, v. 35, p. 1–14, 2018. <a href="https://doi.org/10.11606/rdg.v35i0.142407">doi:10.11606/rdg.v35i0.142407</a></li>
+    </ul>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Fernanda Carine Soares Mendes · Space Tech Bootcamp 2026 — Future Tech Leaders Brasil.
+    Orientação no bootcamp: Emanuel Goulart. Código desenvolvido com apoio de assistente de IA (Claude, da Anthropic) e revisado pela autora.
+    Dados: Copernicus/ESA (Sentinel-2), Google (Cloud Score+), WDPA e MapBiomas.
+    <a href="https://github.com/passagens-alt/area-queimada-chapada-mesas">Repositório no GitHub</a>.
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function () {
+  var MESES = [
+    { m: 6,  nome: 'junho',    curto: 'jun', cor: '#fde725', ha: 6612 },
+    { m: 7,  nome: 'julho',    curto: 'jul', cor: '#5ec962', ha: 1637 },
+    { m: 8,  nome: 'agosto',   curto: 'ago', cor: '#21918c', ha: 293 },
+    { m: 9,  nome: 'setembro', curto: 'set', cor: '#3b528b', ha: 2152 },
+    { m: 10, nome: 'outubro',  curto: 'out', cor: '#440154', ha: 1508 }
+  ];
+  var porMes = {}; MESES.forEach(function (x) { porMes[x.m] = x; });
+  var fmt = function (n) { return n.toLocaleString('pt-BR', { maximumFractionDigits: 1 }); };
+
+  var map = L.map('map', { scrollWheelZoom: false, preferCanvas: true }).setView([-7.12, -47.2], 10);
+  var satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 18, attribution: 'Imagens &copy; Esri, Maxar, Earthstar Geographics'
+  }).addTo(map);
+  var ruas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18, attribution: '&copy; colaboradores do OpenStreetMap'
+  });
+  map.on('click', function () { map.scrollWheelZoom.enable(); });
+
+  var camadas = {};
+  MESES.forEach(function (x) { camadas[x.m] = L.layerGroup().addTo(map); });
+  L.control.layers({ 'Satélite': satelite, 'Mapa de ruas': ruas }, null, { position: 'topright' }).addTo(map);
+
+  var legenda = L.control({ position: 'bottomright' });
+  legenda.onAdd = function () {
+    var d = L.DomUtil.create('div', 'legend');
+    d.innerHTML = '<strong>Mês da queima</strong><br>' + MESES.map(function (x) {
+      return '<span class="sw" style="background:' + x.cor + '"></span>' + x.nome;
+    }).join('<br>');
+    return d;
+  };
+  legenda.addTo(map);
+
+  var barra = document.getElementById('filters');
+  MESES.forEach(function (x) {
+    var lab = document.createElement('label');
+    lab.className = 'chip';
+    lab.innerHTML = '<input type="checkbox" checked aria-label="Mostrar ' + x.nome + '">' +
+      '<span class="sw" style="background:' + x.cor + '"></span>' + x.curto +
+      ' <small>' + fmt(x.ha) + ' ha</small>';
+    lab.querySelector('input').addEventListener('change', function (e) {
+      if (e.target.checked) { camadas[x.m].addTo(map); } else { map.removeLayer(camadas[x.m]); }
+    });
+    barra.appendChild(lab);
+  });
+
+  fetch('poligonos_area_queimada_2024.geojson')
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (gj) {
+      var limites = L.latLngBounds([]);
+      L.geoJSON(gj, {
+        style: function (f) {
+          var c = (porMes[f.properties.mes] || {}).cor || '#888';
+          return { color: c, weight: 0.6, fillColor: c, fillOpacity: 0.75, opacity: 0.9 };
+        },
+        onEachFeature: function (f, layer) {
+          var x = porMes[f.properties.mes];
+          layer.bindPopup('<strong>Área queimada</strong><br>Mês da queima: ' + (x ? x.nome : '?') +
+            ' de 2024<br>Área: ' + fmt(f.properties.area_ha) + ' ha');
+          if (x) { camadas[x.m].addLayer(layer); }
+          limites.extend(layer.getBounds());
+        }
+      });
+      if (limites.isValid()) { map.fitBounds(limites, { padding: [10, 10] }); }
+      document.getElementById('loading').remove();
+    })
+    .catch(function () {
+      document.getElementById('loading').textContent = 'Não foi possível carregar os polígonos.';
+    });
+})();
+</script>
+</body>
+</html>
